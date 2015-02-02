@@ -57,3 +57,17 @@ service configure_vnswap /system/bin/configure_vnswap
 # LMK
 on property:init.svc.bootanim=stopped
     write /sys/module/lowmemorykiller/parameters/minfree 12288,15360,18432,21504,24576,30720
+
+# CyanogenMod Performance Profiles
+
+# Powersave
+on property:sys.perf.profile=0
+	write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor pegasusq
+
+# Balanced
+on property:sys.perf.profile=1
+	write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor pegasusq
+
+# Performance
+on property:sys.perf.profile=2
+	write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor performance
