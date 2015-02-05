@@ -102,3 +102,7 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/configs/configure_vnswap:system/bin/configure_vnswap
 
 $(call inherit-product-if-exists, vendor/samsung/i9300/i9300-vendor.mk)
+
+# Allow tethering without provisioning app
+PRODUCT_PROPERTY_OVERRIDES += \
+    net.tethering.noprovisioning=true
