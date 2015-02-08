@@ -10,17 +10,19 @@
 ## Registro del Demonio
 DNAME="keilyd"
 ## Registro de los procesos corriente
-PNAME="proc"
+PNAME="process"
 ## Registro del kernel
-KNAME="krnl"
+KNAME="dmesg"
 ## Registro del logcal
-CNAME="lcat"
+CNAME="logcat"
 ## 'cpuinfo' dump
-CPUNAME="cpud"
+CPUNAME="cpuinfo"
 ## 'build.prop" dump
-BNAME="bprop"
+BNAME="build_prop"
 ## 'lsmod' LOG
-MODNAME="kmod"
+MODNAME="lsmod"
+## last_kmsg
+$LASTKMSG="last_kmsg"
 
 ## Modificar el valor de MINS para cambiar la frecuencia
 ## la que Keily escribe los registros a la SDCARD. Solo
@@ -55,7 +57,7 @@ FILEDIR=/sdcard/logged
 TMPDIR=$FILEDIR/tmp
 
 CURR_PROFIX=_curr
-PACKED_PROFIX=.zip
+PACKED_PROFIX=.tar.xz
 LAST_PROFIX=_last
 NORM_PROFIX=.txt
 
@@ -65,13 +67,14 @@ LAST_LOG_PACKED=$FILEDIR/$DNAME$LAST_PROFIX$PACKED_PROFIX
 
 ## UBICANDO LOS ARCHIVOS
 DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
-REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX $BNAME$NORM_PROFIX $MODNAME$NORM_PROFIX )
+REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX $BNAME$NORM_PROFIX $MODNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX )
 PROCF=$TMPDIR/${REG_LIST[0]}
 KERNF=$TMPDIR/${REG_LIST[1]}
 LCATF=$TMPDIR/${REG_LIST[2]}
 CPUIF=$TMPDIR/${REG_LIST[3]}
 BUILF=$TMPDIR/${REG_LIST[4]}
 LSMOF=$TMPDIR/${REG_LIST[5]}
+LASTF=$TMPDIR/${REG_LIST[6]}
 
 ID=$RANDOM
 
@@ -104,7 +107,7 @@ then
         echo "$(OK) Creado el directorio de trabajo y el temporal." >> $DELOG
     fi
     echo "$(OK) A punto de demonizar Keily..." >> $DELOG
-    setsid ./18keily --demonize &>>$DELOG < $DELOG &
+    setsid ./system/etc/init.d/18keily --demonize &>>$DELOG < $DELOG &
     echo "$(OK) El pre-inicio de Keily ha finalizado." >> $DELOG
 elif [[ $1 == --demonize ]];
 ## Aqui la salida se redirige al archivo predefinido en el inicio previo del demonio
@@ -155,6 +158,9 @@ $(lsmod)
         echo "$(OK) #############################################################" >> $LSMOF
         echo "$(OK) Archivo $LSMOF escrito completamente."
         echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $LSMOF
+        
+        cp /proc/config.gz $TMPDIR/config.gz
+        
             while [ -z "" ];
             do
                 ## EN ESTE ESPACIO EL DEMONIO KEILY EJECUTA ACCIONES CADA $SECS SEGUNDOS
@@ -208,19 +214,19 @@ $(dmesg)
                 echo "$(OK) Volcado del Logcat del buffer de mensajes de 'radio'" >> $LCATF
                 echo "$(OK)
                 
-$(logcat -b radio -v time)
+$(logcat -b radio -v time -d)
 
                 " >> $LCATF
                 echo "$(OK) Volcado del Logcat del buffer de mensajes 'eventos'" >> $LCATF
                 echo "$(OK)
                 
-$(logcat -b events -v time)
+$(logcat -b events -v time -d)
                 
                 " >> $LCATF
                 echo "$(OK) Volcado del Logcat del buffer de mensajes 'main'" >> $LCATF
                 echo "$(OK)
                 
-$(logcat -b main -v time)
+$(logcat -b main -v time -d)
 
                 " >> $LCATF                
                 echo "$(OK) #############################################################" >> $LCATF
@@ -229,13 +235,16 @@ $(logcat -b main -v time)
                 
                 ## Crear el ZIP
                 rm $LOG_PACKED
-                echo "$(WARN) Creando el archivo comprimido en ZIP con la inforacion recolectada
+                echo "$(WARN) Creando el archivo comprimido en XZ con la inforacion recolectada
             
-$(zip -r -9 $LOG_PACKED $TMPDIR)
+$(tar -cf - $TMPDIR/ | xz -9 -c - > $LOG_PACKED)
 
                 "
                 echo "$(OK) Paquete listo para enviar al desarrollador..."
                 echo "$(OK) El proximo paquete se creara en $SECS segundos ($MINS minutos)."
+                echo ""
+                echo ""
+                echo ""
                 sleep $SECS
             done
         else
