@@ -319,5 +319,8 @@
          * The device must be provisioned with HDCP keys (for protected content).
     -->
     <bool name="config_enableWifiDisplay">true</bool>
+    
+    <!-- Boolean to enable Stylus gestures -->
+    <bool name="config_stylusGestures">true</bool>
 
 </resources>
