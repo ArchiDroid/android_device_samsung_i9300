@@ -13,7 +13,7 @@ DNAME="keilyd"
 PNAME="process"
 ## Registro del kernel
 KNAME="dmesg"
-## Registro del logcal
+## Registro del logcat
 CNAME="logcat"
 ## 'cpuinfo' dump
 CPUNAME="cpuinfo"
@@ -160,6 +160,7 @@ $(lsmod)
         echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $LSMOF
         
         cp /proc/config.gz $TMPDIR/config.gz
+        cp /proc/last_kmsg $LASTF
         
             while [ -z "" ];
             do
