@@ -12,17 +12,15 @@ DNAME="keilyd"
 ## Registro de los procesos corriente
 PNAME="process"
 ## Registro del kernel
-KNAME="dmesg"
+KNAME="kinfo"
 ## Registro del logcat
 CNAME="logcat"
 ## 'cpuinfo' dump
 CPUNAME="cpuinfo"
 ## 'build.prop" dump
 BNAME="build_prop"
-## 'lsmod' LOG
-MODNAME="lsmod"
 ## last_kmsg
-$LASTKMSG="last_kmsg"
+LASTKMSG="last_kmsg"
 
 ## Modificar el valor de MINS para cambiar la frecuencia
 ## la que Keily escribe los registros a la SDCARD. Solo
@@ -48,6 +46,16 @@ function ERR (){
     ERR="[ ----ERROR----$(dtime) ]"
     echo $ERR
 }
+function separator (){
+    CHAR="#"
+    SEP=""
+    for s in {1..128}
+    do
+        SEP=$SEP$CHAR
+    done
+}
+
+SEPA=$(separator)
 
 ## FILEDIR contiene la carpeta donde se guarda el ZIP
 ## listo para enviar, se recomienda no tocar este valor.
@@ -57,7 +65,7 @@ FILEDIR=/sdcard/logged
 TMPDIR=$FILEDIR/tmp
 
 CURR_PROFIX=_curr
-PACKED_PROFIX=.tar.xz
+PACKED_PROFIX=.zip
 LAST_PROFIX=_last
 NORM_PROFIX=.txt
 
@@ -67,14 +75,7 @@ LAST_LOG_PACKED=$FILEDIR/$DNAME$LAST_PROFIX$PACKED_PROFIX
 
 ## UBICANDO LOS ARCHIVOS
 DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
-REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX $BNAME$NORM_PROFIX $MODNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX )
-PROCF=$TMPDIR/${REG_LIST[0]}
-KERNF=$TMPDIR/${REG_LIST[1]}
-LCATF=$TMPDIR/${REG_LIST[2]}
-CPUIF=$TMPDIR/${REG_LIST[3]}
-BUILF=$TMPDIR/${REG_LIST[4]}
-LSMOF=$TMPDIR/${REG_LIST[5]}
-LASTF=$TMPDIR/${REG_LIST[6]}
+REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX $BNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX )
 
 ID=$RANDOM
 
@@ -117,139 +118,136 @@ then
     WHOAMI=$(whoami)
     if [ "$WHOAMI" != "root" ];
     then
-        echo "$(ERR) El demonio de Keily debe ejecutarse como root, $WHOAMI no es root."
+        echo "$(ERR) El demonio de Keily debe ejecutarse como root, '$WHOAMI' no es root."
     else
         echo "$(OK) El demonio Keily #$ID se esta ejecutando como 'root'"
         cd $FILEDIR && echo "$(OK) Cambiado al directorio de trabajo $FILEDIR" || echo "$(ERR) No se puede cambiar al directorio $FILEDIR"
         THISDIR=$(pwd)
         if [ "$THISDIR" = "$FILEDIR" ];
         then
-        ## BUILD.PROP SYSCTL.CONF CPUINFO LSMOD
-        
-        
-        echo "$(OK) Volcado del archivo /system/build.prop" >> $BUILF
-        echo "$(OK)
-        
-$(cat /system/build.prop)
-        
-        " >> $BUILF
-        echo "$(OK) #############################################################" >> $BUILF
-        echo "$(OK) Archivo $BUILF escrito completamente."
-        echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $BUILF
-        
-        
-        echo "$(OK) Volcado del archivo /proc/cpuinfo" >> $CPUIF
-        echo "$(OK)
-
-$(cat /proc/cpuinfo)
-
-        " >> $CPUIF
-        echo "$(OK) #############################################################" >> $CPUIF
-        echo "$(OK) Archivo $CPUIF escrito completamente."
-        echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $CPUIF
-        
-        
-        echo "$(OK) Modulos del kernel cargados" >> $LSMOF
-        echo "$(OK)
-        
-$(lsmod)
-        
-        " >> $LSMOF
-        echo "$(OK) #############################################################" >> $LSMOF
-        echo "$(OK) Archivo $LSMOF escrito completamente."
-        echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $LSMOF
-        
-        cp /proc/config.gz $TMPDIR/config.gz
-        cp /proc/last_kmsg $LASTF
-        
+             
+            ## EN ESTE WHILE SE EJECUTAN LOS COMANDOS PARA VOLCAR LOS BUFFER DE REGISTROS
             while [ -z "" ];
-            do
-                ## EN ESTE ESPACIO EL DEMONIO KEILY EJECUTA ACCIONES CADA $SECS SEGUNDOS
-                echo "$(OK) Contenido dentro de /proc" >> $PROCF
-                echo "$(OK)
-                
+                do
+                     for j in "${REG_LIST[@]}"
+                     do
+                         echo "$(OK) Escribiendo los registros del sistema en $j."
+                         SUCESS=""
+                         echo "$(OK) Inicio del archivo" > $TMPDIR/$j && SUCESS="Y" || SUCESS="N"
+                         if [ "$SUCESS" = "Y" ];
+                         then
+                             VALID=""
+                             echo "$(OK) Archivo $j iniciado correctamente."
+                             echo "$(OK) Inicio del archivo $j..." > $TMPDIR/$j
+                             echo "$(OK) $SEPA" >> $TMPDIR/$j
+                             echo "$(OK) $SEPA" >> $TMPDIR/$j
+                             case $j in
+                             $PNAME$NORM_PROFIX)
+                                 ## PROCESOS CORRIENTES Y SU INFORMACION (/proc)
+                                 echo "$(OK) Viendo dentro del directorio /proc" >> $TMPDIR/$j
+                                 echo "$(OK)
 $(ls /proc)
-
-                " >> $PROCF
-                echo "$(OK) Lista de todos los procesos" >> $PROCF
-                echo "$(OK)
-                
-$(ps all)
-
-                " >> $PROCF
-                echo "$(OK) Mapa de la memoria RAM" >> $PROCF
-                echo "$(OK)
-                
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Lista de los procesos corrientes usando TOP" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(top -bcn 1)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Memoria libre usando FREE" >> $TMPDIR/$j
+                                 echo "$(OK)
 $(free -h -l)
-                
-                " >> $PROCF
-                echo "$(OK) #############################################################" >> $PROCF
-                echo "$(OK) Archivo $PROCF escrito completamente."
-                echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $PROCF
-                
-                
-                echo "$(OK) Version del kernel" > $KERNF
-                echo "$(OK)
-                
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Archivo de procesos escrito correctamente." >> $TMPDIR/$j
+                                 ;;
+                             $KNAME$NORM_PROFIX)
+                             ## COSAS DEL KERNEL
+                                 echo "$(OK) Version del kernel" >> $TMPDIR/$j
+                                 echo "$(OK)
 $(uname -a)
-                
-                " >> $KERNF
-                echo "$(OK)
-                
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Informacion del kernel" >> $TMPDIR/$j
+                                 echo "$(OK)
 $(cat /proc/version)
-                
-                " >> $KERNF
-                echo "$(OK) Volcado de la salida de DMESG" >> $KERNF
-                echo "$(WARN) Este archivo puede ser bastante grande" >> $KERNF
-                echo "$(OK)
-                
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Modulos cargados (/proc/modules)" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cat /proc/modules)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) CMDLINE" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cat /proc/cmdline)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Salida de DMESG" >> $TMPDIR/$j
+                                 echo "$(OK)
 $(dmesg)
-                
-                " >> $KERNF
-                echo "$(OK) #############################################################" >> $KERNF
-                echo "$(OK) Archivo $KERNF escrito completamente."
-                echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $KERNF
-                
-                
-                echo "$(WARN) Este archivo puede ser bastante grande" > $LCATF
-                echo "$(OK) Volcado del Logcat del buffer de mensajes de 'radio'" >> $LCATF
-                echo "$(OK)
-                
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 ;;
+                             $CNAME$NORM_PROFIX)
+                                 echo "$(OK) Logcat de RADIO"  >> $TMPDIR/$j
+                                 echo "$(OK) 
 $(logcat -b radio -v time -d)
-
-                " >> $LCATF
-                echo "$(OK) Volcado del Logcat del buffer de mensajes 'eventos'" >> $LCATF
-                echo "$(OK)
-                
+                                 "  >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Logcat de EVENTS"  >> $TMPDIR/$j
+                                 echo "$(OK) 
 $(logcat -b events -v time -d)
-                
-                " >> $LCATF
-                echo "$(OK) Volcado del Logcat del buffer de mensajes 'main'" >> $LCATF
-                echo "$(OK)
-                
+                                 "  >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Logcat de MAIN"  >> $TMPDIR/$j
+                                 echo "$(OK) 
 $(logcat -b main -v time -d)
-
-                " >> $LCATF                
-                echo "$(OK) #############################################################" >> $LCATF
-                echo "$(OK) Archivo $LCATF escrito completamente."
-                echo "$(OK) TERMINADO: No mas informacion para recolectar" >> $LCATF
+                                 "  >> $TMPDIR/$j
+                                 ;;
+                             $CPUNAME$NORM_PROFIX)
+                                 echo "$(OK) Inforacion de la CPU" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(cat /proc/cpuinfo)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             $BNAME$NORM_PROFIX)
+                                 echo "$(OK) Salida de BUILD.PROP" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(cat /system/build.prop)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             $LASTKMSG$NORM_PROFIX)
+                                 echo "$(OK) Copia de last_kmgs" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(cat /proc/last_kmgs)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             *)
+                                 echo "$(ERR) Archivo de trabajo $j no encontrado."
+                                 ;;
+                             esac
+                             if [ -z $VALID ];
+                             then
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) EOF" >> $TMPDIR/$j
+                            fi
+                         else
+                             echo "$(ERR) No se puede accesar al archivo $j."
+                         fi
+                    done
+                    cp /proc/config.gz $TMPDIR/config.gz
+                    cp /proc/filesystems $TMPDIR/filesystems
+                    cd $TMPDIR
+                    rm $LOG_PACKED
+                    zip $DNAME$CURR_PROFIX$PACKED_PROFIX *
+                    mv $DNAME$CURR_PROFIX$PACKED_PROFIX $LOG_PACKED
+                    sleep $SECS
+                done
                 
-                ## Crear el ZIP
-                rm $LOG_PACKED
-                echo "$(WARN) Creando el archivo comprimido en XZ con la inforacion recolectada
-            
-$(tar -cf - $TMPDIR/ | xz -9 -c - > $LOG_PACKED)
-
-                "
-                echo "$(OK) Paquete listo para enviar al desarrollador..."
-                echo "$(OK) El proximo paquete se creara en $SECS segundos ($MINS minutos)."
-                echo ""
-                echo ""
-                echo ""
-                sleep $SECS
-            done
         else
-            echo "$(ERR) No se puede entrar al directorio de trabajo."}
+            echo "$(ERR) No se pudo entrar al directorio de trabajo."}
 
         fi
     fi
