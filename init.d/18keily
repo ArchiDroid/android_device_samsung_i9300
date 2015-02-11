@@ -239,10 +239,12 @@ $(cat /proc/last_kmgs)
                     done
                     cp /proc/config.gz $TMPDIR/config.gz
                     cp /proc/filesystems $TMPDIR/filesystems
+                    THSDIR=$(pwd)
                     cd $TMPDIR
                     rm $LOG_PACKED
                     zip $DNAME$CURR_PROFIX$PACKED_PROFIX *
                     mv $DNAME$CURR_PROFIX$PACKED_PROFIX $LOG_PACKED
+                    cd $THSDIR
                     sleep $SECS
                 done
                 
