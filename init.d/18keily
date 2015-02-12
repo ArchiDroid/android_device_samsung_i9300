@@ -65,7 +65,7 @@ SEPA=$(separator)
 ## listo para enviar, se recomienda no tocar este valor.
 ## TMPDIR almacena donde se guardan los archivos de
 ## texto plano antes de comprimirse en un ZIP
-FILEDIR=/sdcard/logged ##################
+FILEDIR=/sdcard/logged
 TMPDIR=$FILEDIR/tmp
 OUTDIR=$FILEDIR/out
 
@@ -260,8 +260,7 @@ $(cat /proc/last_kmgs)
                     done
                     cp /proc/config.gz $TMPDIR/config.gz
                     cp /proc/filesystems $TMPDIR/filesystems
-                    
-                    
+                    #
                     THSDIR=$(pwd)
                     cd $TMPDIR && echo "$(OK) En el directorio $TMPDIR"
                     rm $LOG_PACKED && echo "$(OK) Borrado $LOG_PACKED"
@@ -273,16 +272,12 @@ $(cat /proc/last_kmgs)
                     echo ""
                     echo ""
                 done
-                
         else
-            echo "$(ERR) No se pudo entrar al directorio de trabajo."}
-
+            echo "$(ERR) No se pudo entrar al directorio de trabajo."
         fi
     fi
 else
     echo "$(OK) Keily #$ID"
     echo "$(ERR) Para iniciar Keily como demonio se utiliza '--demonize' como primer parametro" >> $DELOG
 fi
-
-
 echo "$(OK) Sesion de Keily #$ID finalizada correctamente." >> $DELOG
