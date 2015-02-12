@@ -25,25 +25,29 @@ LASTKMSG="last_kmsg"
 ## Modificar el valor de MINS para cambiar la frecuencia
 ## la que Keily escribe los registros a la SDCARD. Solo
 ## Enteros, bash no acepta decimales.
-MINS=10
+MINS=15
 SECS=$(($MINS * 60))
 
 ##FECHA Y HORA
 function dtime (){
-    DATE="$(date +%d/%m/%y@%H:%M:%S)"
+    DATE="$(date +%m%d%y@%H:%M:%S)"
+    echo $DATE
+}
+function namedate (){
+    DATE="-$(date +%m%d%y-%H.%M)"
     echo $DATE
 }
 function OK (){
-    OK="[ ---CORRECTO--$(dtime) ]"
+    OK="[ -DONE-$(dtime) ]"
     echo $OK
 }
 
 function WARN (){
-    WARN="[ -ADVERTENCIA-$(dtime) ]"
+    WARN="[ -WARN-$(dtime) ]"
     echo $WARN
 }
 function ERR (){
-    ERR="[ ----ERROR----$(dtime) ]"
+    ERR="[ -ERR-$(dtime) ]"
     echo $ERR
 }
 function separator (){
@@ -61,8 +65,9 @@ SEPA=$(separator)
 ## listo para enviar, se recomienda no tocar este valor.
 ## TMPDIR almacena donde se guardan los archivos de
 ## texto plano antes de comprimirse en un ZIP
-FILEDIR=/sdcard/logged
+FILEDIR=/sdcard/logged ##################
 TMPDIR=$FILEDIR/tmp
+OUTDIR=$FILEDIR/out
 
 CURR_PROFIX=_curr
 PACKED_PROFIX=.zip
@@ -70,8 +75,9 @@ LAST_PROFIX=_last
 NORM_PROFIX=.txt
 
 # Apunta al ZIP actual y al ZIP anterior
-LOG_PACKED=$FILEDIR/$DNAME$CURR_PROFIX$PACKED_PROFIX
-LAST_LOG_PACKED=$FILEDIR/$DNAME$LAST_PROFIX$PACKED_PROFIX
+LAST_ZIP_PREFIX=$DNAME$LAST_PROFIX
+LOG_ZIP_PREFIX=$DNAME$CURR_PROFIX
+LOG_PACKED=$OUTDIR/$LOG_ZIP_PREFIX$(namedate)$PACKED_PROFIX
 
 ## UBICANDO LOS ARCHIVOS
 DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
@@ -84,17 +90,27 @@ if [ -z $1 ];
 then
     MAKEDIR=""
     ls $FILEDIR || MAKEDIR="SI"
+    ls $OUTDIR || MAKEDIR="SI"
+    ls $TMPDIR || MAKEDIR="SI"
     if [ -z $MAKEDIR ];
     then
-        ## Borro los "last" inutiles
-        rm $LAST_LOG_PACKED 
-        ## Muevo los "current" a Last antes de sobrescribirlos
-        mv $LOG_PACKED $LAST_LOG_PACKED
         ## Quitar el directorio TMP
         rm -rf $TMPDIR
         mkdir $TMPDIR
         echo "$(OK) Keily #$ID" > $DELOG
+        echo "$(OK) Keily fue lanzado con la orden '$0 $@'" >> $DELOG
         echo "$(OK) Archivos obsoletos limpiados correctamente" >> $DELOG
+        THISDIR=$(pwd)
+        echo "$(OK) En el directorio '$THISDIR'" >> $DELOG
+        cd $OUTDIR
+        echo "$(OK) Cambiado a '$OUTDIR'" >> $DELOG
+        ## Borro los "last" inutiles
+        FIL=$(ls $LAST_ZIP_PREFIX*)
+        rm $LAST_ZIP_PREFIX* && echo "$(OK) Borrado $FIL" >> $DELOG
+        ## Muevo los "current" a Last antes de sobrescribirlos
+        FIL=$(ls $LOG_ZIP_PREFIX*)
+        DAT="${FIL: -17:17}"
+        mv $LOG_ZIP_PREFIX* $LAST_ZIP_PREFIX$DAT && echo "$(OK) Movido $FIL a $LAST_ZIP_PREFIX$DAT" >> $DELOG
         for i in "${REG_LIST[@]}"
         do
             echo "" > $TMPDIR/$i && echo "$(OK) Inicializado el archivo $TMPDIR/$i" >> $DELOG || echo "$(ERR) No se puede iniciarlizar $TMPDIR/$i" >> $DELOG
@@ -104,16 +120,22 @@ then
         ## No existe la carpeta en /sdcard
         mkdir $FILEDIR
         mkdir $TMPDIR
+        mkdir $OUTDIR
         echo "$(OK) Keily #$ID" > $DELOG
+        echo "$(OK) Keily fue lanzado con la orden '$0 $@'" >> $DELOG
         echo "$(OK) Creado el directorio de trabajo y el temporal." >> $DELOG
+        echo "$(OK) Keily relanzado (primer arranque)." >> $DELOG
+        setsid $0 &>>/dev/null < /dev/null &
+        exit 0
     fi
     echo "$(OK) A punto de demonizar Keily..." >> $DELOG
-    setsid ./system/etc/init.d/18keily --demonize &>>$DELOG < $DELOG &
+    setsid $0 --demonize &>>$DELOG < $DELOG &
     echo "$(OK) El pre-inicio de Keily ha finalizado." >> $DELOG
 elif [[ $1 == --demonize ]];
 ## Aqui la salida se redirige al archivo predefinido en el inicio previo del demonio
 then
     echo "$(OK) Keily #$ID --demonize"
+    echo "$(OK) Keily fue lanzado con la orden '$0 $@'" >> $DELOG
     echo "$(OK) Keily se lanzo como demonio correctamente."
     WHOAMI=$(whoami)
     if [ "$WHOAMI" != "root" ];
@@ -125,7 +147,6 @@ then
         THISDIR=$(pwd)
         if [ "$THISDIR" = "$FILEDIR" ];
         then
-             
             ## EN ESTE WHILE SE EJECUTAN LOS COMANDOS PARA VOLCAR LOS BUFFER DE REGISTROS
             while [ -z "" ];
                 do
@@ -239,13 +260,18 @@ $(cat /proc/last_kmgs)
                     done
                     cp /proc/config.gz $TMPDIR/config.gz
                     cp /proc/filesystems $TMPDIR/filesystems
+                    
+                    
                     THSDIR=$(pwd)
-                    cd $TMPDIR
-                    rm $LOG_PACKED
-                    zip $DNAME$CURR_PROFIX$PACKED_PROFIX *
-                    mv $DNAME$CURR_PROFIX$PACKED_PROFIX $LOG_PACKED
-                    cd $THSDIR
-                    sleep $SECS
+                    cd $TMPDIR && echo "$(OK) En el directorio $TMPDIR"
+                    rm $LOG_PACKED && echo "$(OK) Borrado $LOG_PACKED"
+                    zip $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Comprimido $(ls) en $DNAME$CURR_PROFIX$PACKED_PROFIX"
+                    mv $DNAME$CURR_PROFIX$PACKED_PROFIX $LOG_PACKED && echo "$(OK) Movido $DNAME$CURR_PROFIX$PACKED_PROFIX a $LOG_PACKED"
+                    cd $THSDIR && echo "$(OK) En el directorio $THISDIR"
+                    sleep $SECS && echo "$(OK) Tiempo de $SECS segundos agotado. Inicio de nuevo"
+                    echo $(separator)
+                    echo ""
+                    echo ""
                 done
                 
         else
