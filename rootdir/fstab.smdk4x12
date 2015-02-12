@@ -16,3 +16,9 @@
 /dev/block/mmcblk0p5                            /boot           emmc        defaults                                                                        recoveryonly
 /dev/block/mmcblk0p6                            /recovery       emmc        defaults                                                                        recoveryonly
 /dev/block/mmcblk0p7                            /modem          emmc        defaults                                                                        recoveryonly
+
+# ZRam
+/dev/block/zram0                                none            swap        defaults                                                                        zramsize=157286400
+/dev/block/zram1                                none            swap        defaults                                                                        zramsize=157286400
+/dev/block/zram2                                none            swap        defaults                                                                        zramsize=157286400
+/dev/block/zram3                                none            swap        defaults                                                                        zramsize=157286400

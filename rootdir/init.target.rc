@@ -48,15 +48,10 @@ service gpsd /system/bin/gpsd -c /system/etc/gps.xml
     user gps
     group system inet sdcard_rw
 
-# vnswap file size set to 30% of the ram
-service configure_vnswap /system/bin/configure_vnswap
-    class late_start
-    user root
-    oneshot
-
 # LMK
 on property:init.svc.bootanim=stopped
     write /sys/module/lowmemorykiller/parameters/minfree 12288,15360,18432,21504,24576,30720
+    write /proc/sys/vm/swappiness 80
 
 # CyanogenMod Performance Profiles
 
