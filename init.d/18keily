@@ -78,6 +78,7 @@ SEPA=$(separator)
 FILEDIR=/sdcard/keilyd
 TMPDIR=$FILEDIR/tmp
 OUTDIR=$FILEDIR/out
+INITD=$TMPDIR/init.d
 
 CURR_PROFIX=_curr
 PACKED_PROFIX=.zip
@@ -99,7 +100,7 @@ ID=$RANDOM
 function makezip (){
     cd $TMPDIR && echo "$(OK) Here: $TMPDIR"
     rm $1 && echo "$(OK) Deleted $1"
-    zip $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(ls) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
+    zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(ls) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
     mv $DNAME$CURR_PROFIX$PACKED_PROFIX $1 && echo "$(OK) Moved $DNAME$CURR_PROFIX$PACKED_PROFIX to $1"
 }
 
@@ -115,6 +116,7 @@ then
     MAKEDIR=""
     ls $FILEDIR &> /dev/null || MAKEDIR="Y"
     ls $OUTDIR &> /dev/null || MAKEDIR="Y"
+    ls $INITD &> /dev/null || MAKEDIR="Y"
     ls $TMPDIR &> /dev/null || MAKEDIR="Y"
     if [ -z $MAKEDIR ];
     then
@@ -167,6 +169,7 @@ then
         mkdir $FILEDIR
         mkdir $TMPDIR
         mkdir $OUTDIR
+        mkdir $INITD
         echo "$(OK) Launched #$ID" > $DELOG
         echo "$(OK) cmdline: '$0 $@'" >> $DELOG
         echo "$(OK) Created working dirs." >> $DELOG
@@ -227,12 +230,12 @@ $(ls /proc)
                                  echo "$(OK) $SEPA" >> $TMPDIR/$j
                                  echo "$(OK) Output of TOP" >> $TMPDIR/$j
                                  echo "$(OK)
-$(top -bcn 1)
+$(top -n 1)
                                  " >> $TMPDIR/$j
                                  echo "$(OK) $SEPA" >> $TMPDIR/$j
                                  echo "$(OK) Output of FREE" >> $TMPDIR/$j
                                  echo "$(OK)
-$(free -h -l)
+$(free)
                                  " >> $TMPDIR/$j
                                  echo "$(OK) $SEPA" >> $TMPDIR/$j
                                  echo "$(OK) SUCCESS." >> $TMPDIR/$j
@@ -301,10 +304,10 @@ $(cat /proc/last_kmgs)
                                  ;;
                              $SYSCTL$NORM_PROFIX)
                                  EX=""
-                                 ls /system/etc/sysctl.conf &> /dev/null && EX="Y" || EX="N"
+                                 ls /etc/sysctl.conf &> /dev/null && EX="Y" || EX="N"
                                  if [ "$EX" = "Y" ];
                                  then
-                                     cat /system/etc/sysctl.conf >> $TMPDIR/$j && echo "$(OK) Dump file $j successfully" || "$(ERR) Can't dump $j" 
+                                     cat /etc/sysctl.conf >> $TMPDIR/$j && echo "$(OK) Dump file $j successfully" || "$(ERR) Can't dump $j" 
                                  else
                                      echo "$(ERR) /system/etc/sysctl.conf: No such file"
                                  fi
@@ -325,16 +328,23 @@ $(cat /proc/last_kmgs)
                     done
                     cp /proc/config.gz $TMPDIR/config.gz && echo "$(OK) config.gz found and copied" || echo "$(OK) /proc/config.gz: config.gz support disabled in kernel"
                     cp /proc/filesystems $TMPDIR/filesystems && echo "$(OK) filesystems found and copied" || echo "$(OK) /proc/filesystems: No such file"
+                    cp -a /etc/init.d/. $INITD && echo "$(OK) init.d tweaks copied"
+                    echo "$(OK) SHA-256 sum: $(sha256sum $0)"
                     ## Take an instantanely log and exit.
+                    THSDIR=$(pwd)
+                    makezip $LOG_PACKED
+                    mv $DELOG $OUTDIR/ktmp
+                    rm -rf $TMPDIR
+                    mkdir $TMPDIR
+                    mv $OUTDIR/ktmp $DELOG
+                    echo "$(OK) Debloated"
+                    cd $THSDIR && echo "$(OK) Here: $THISDIR"
+                    echo "$(OK) Keilyd cycle finished."
                     if [[ $2 == --snap ]];
                     then
                         echo "$(OK) Snapshot successfully taken, exit now..."
                         break
                     fi
-                    THSDIR=$(pwd)
-                    makezip $LOG_PACKED
-                    cd $THSDIR && echo "$(OK) Here: $THISDIR"
-                    echo "$(OK) Keilyd cycle finished."
                     sleep $SECS && echo "$(OK) Wait time of $SECS secs successfully finished (c: $SCLEAN))."
                     echo $(separator)
                     echo ""
@@ -353,13 +363,20 @@ then
              2. Your SDCARD is mounted or symlinked to /sdcard
              3. You have BASH 4.3 installed or symlinked on /system/xbin and it works
              4. Your device have init.d {'run-parts'} support (busybox is mandatory)
-             5. Your device is rooted."
+             5. Your device is rooted.
+             6. The script is launched by run-parts or with absolute path
+             "
+    echo "By default, this script is in /etc/init.d/18keily, you can change the directory or the fineame
+             if the avobe conditions are meet.
+             "
     echo "Keilyd verify all the environment and exit if there are unmeeted requisites"
     echo "You can disable Keilyd without deleting this file by changing ENABLED to any thing but 'Y'."
     echo "In addition, you can launch keilyd with '--snap' parameter in order to create a instantanely
-           report. If the daemon is running, this will be merged in the next auto-generated ZIP, if isn't, 
-           the logs won't be compressed. This is only compatible with FULL PATH launch, i.e. 
-           '/system/etc/init.d/18keily --snap'"
+           report. If the daemon is running, this will generate a new ZIP, even if the daemon is runing.
+           This is only compatible with FULL PATH launch, i.e. 
+           
+           '/system/etc/init.d/18keily --snap'
+           "
     echo "The logs will be saved in $TMPDIR"
     echo "If you pharse --help, this message will be printed in the terminal stdout."
     echo "NoTengoBattery - 2015"
