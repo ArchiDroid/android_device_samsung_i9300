@@ -1,9 +1,15 @@
+<<<<<<< HEAD
 #!/sbin/busybox sh
+=======
+#!/system/bin/sh
+set -e
+>>>>>>> upstream/cm-12.0
 
 ZRAM_DEVICES="zram0 zram1 zram2 zram3"
 ZRAM_SIZE="629145600"
 NUM_DEVICES="4"
 
+<<<<<<< HEAD
 # reset (no need to loop)
 swapoff /dev/block/zram0 > /dev/null 2>&1 &
 swapoff /dev/block/zram1 > /dev/null 2>&1 &
@@ -14,6 +20,8 @@ echo 1 > /sys/block/zram1/reset &
 echo 1 > /sys/block/zram2/reset &
 echo 1 > /sys/block/zram3/reset
 
+=======
+>>>>>>> upstream/cm-12.0
 for ZRAM_DEVICE in $ZRAM_DEVICES; do
 	if [[ -e "/sys/block/$ZRAM_DEVICE/disksize" && -e "/dev/block/$ZRAM_DEVICE" ]]; then
 		echo `expr $ZRAM_SIZE \/ $NUM_DEVICES` > "/sys/block/$ZRAM_DEVICE/disksize"

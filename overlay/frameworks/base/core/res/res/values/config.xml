@@ -320,4 +320,13 @@
     -->
     <bool name="config_enableWifiDisplay">true</bool>
 
+    <!-- If there is no sysfs-based control mechanism, enable this -->
+    <bool name="useCameraInterface">false</bool>
+
+    <!-- Full path to the sysfs toggle -->
+    <string name="flashDevice">/sys/class/camera/rear/rear_flash</string>
+
+    <!-- On setting -->
+    <integer name="valueOn">10</integer>
+
 </resources>

@@ -48,6 +48,12 @@ service gpsd /system/bin/gpsd -c /system/etc/gps.xml
     user gps
     group system inet sdcard_rw
 
+# ZRAM configuration file
+service configure_zram /system/bin/configure_zram
+    class late_start
+    user root
+    oneshot
+
 # LMK
 on property:init.svc.bootanim=stopped
     write /sys/module/lowmemorykiller/parameters/minfree 12288,15360,18432,21504,24576,30720

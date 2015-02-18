@@ -365,7 +365,7 @@ static int start_call(struct m0_audio_device *adev)
     } else {
        pcm_config_vx.rate = adev->wb_amr ? VX_WB_SAMPLING_RATE : VX_NB_SAMPLING_RATE;
     }
-
+    ALOGE("Starting call with WB_AMR=%d", adev->wb_amr);
     /* Open modem PCM channels */
     if (adev->pcm_modem_dl == NULL) {
         ALOGD("Opening PCM modem DL stream");
@@ -480,7 +480,7 @@ void audio_set_wb_amr_callback(void *data, int enable)
     pthread_mutex_lock(&adev->lock);
     if (adev->wb_amr != enable) {
         adev->wb_amr = enable;
-
+        ALOGE("WB_ARM status changed to %d", enable);
         /* reopen the modem PCMs at the new rate */
         if (adev->in_call) {
             end_call(adev);
@@ -693,9 +693,6 @@ static void select_output_device(struct m0_audio_device *adev)
             ALOGD("%s: set voicecall route: bt_disable", __func__);
             set_bigroute_by_array(adev->mixer, bt_disable, 1);
         }
-        // this is needed to mute the current device when output devices are switched, but mute is set
-        adev->hw_device.set_mic_mute(&adev->hw_device, adev->mic_mute);
-
         set_incall_device(adev);
     }
 }
@@ -2606,51 +2603,12 @@ static int adev_set_mode(struct audio_hw_device *dev, audio_mode_t mode)
 
 static int adev_set_mic_mute(struct audio_hw_device *dev, bool state)
 {
-    int headset_on;
-    int headphone_on;
-    int speaker_on;
-    int earpiece_on;
-    int bt_on; 
-
     struct m0_audio_device *adev = (struct m0_audio_device *)dev;
 
-    headset_on = adev->out_device & AUDIO_DEVICE_OUT_WIRED_HEADSET;
-    headphone_on = adev->out_device & AUDIO_DEVICE_OUT_WIRED_HEADPHONE;
-    speaker_on = adev->out_device & AUDIO_DEVICE_OUT_SPEAKER;
-    earpiece_on = adev->out_device & AUDIO_DEVICE_OUT_EARPIECE;
-    bt_on = adev->out_device & AUDIO_DEVICE_OUT_ALL_SCO;
+    if (adev->mode == AUDIO_MODE_IN_CALL)
+            ril_set_mic_mute(&adev->ril, state);
 
     adev->mic_mute = state;
-
-    if (adev->mode == AUDIO_MODE_IN_CALL) {
-        if (state) {
-            if (speaker_on || earpiece_on || headphone_on) {            
-                ALOGD("%s: set voicecall route: default_input_disable", __func__);
-                set_bigroute_by_array(adev->mixer, default_input_disable, 1);
-            }
-            if (headset_on) {               
-                ALOGD("%s: set voicecall route: headset_input_disable", __func__);
-                set_bigroute_by_array(adev->mixer, headset_input_disable, 1);
-            }
-            if (bt_on) {
-                ALOGD("%s: set voicecall route: bt_input_disable", __func__);
-                set_bigroute_by_array(adev->mixer, bt_input_disable, 1);
-            }
-        } else {
-            if (speaker_on || earpiece_on || headphone_on) {
-                ALOGD("%s: set voicecall route: default_input", __func__);
-                set_bigroute_by_array(adev->mixer, default_input, 1);
-            }
-            if (headset_on) {
-                ALOGD("%s: set voicecall route: headset_input", __func__);
-                set_bigroute_by_array(adev->mixer, headset_input, 1);
-            }
-            if (bt_on) {
-                ALOGD("%s: set voicecall route: bt_input", __func__);
-                set_bigroute_by_array(adev->mixer, bt_input, 1);
-            }
-        }
-    }
 
     return 0;
 }
