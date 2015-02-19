@@ -13,10 +13,13 @@
 # NoTengoBattery - 2015
 
 # A value different than "Y" will disable Keilyd
-ENABLED="Y"
+if [ -z "$ENABLED" ];
+then
+    ENABLED="Y"
+fi
 
 ## This is the daemon registry
-DNAME="keilyd"
+DNAME="$(basename $0)"
 ## Dumps the processes
 PNAME="process"
 ## Dumps the kernel log
@@ -36,7 +39,10 @@ DF="df"
 
 ## MINS is the time in minutes that keilyd must wait untill it's
 ## dumps the files again. ONLY INTS
-MINS=15
+if [ -z "$MINS" ];
+then
+    MINS=15
+fi
 SECS=$(($MINS * 60))
 
 ## Date and time for the registry
@@ -77,7 +83,10 @@ SEPA=$(separator)
 
 ## FILEDIR points to the very top of the working directory.
 ## TMPDIR and OUTDIR are subdirectories
-FILEDIR=/sdcard/keilyd
+if [ -z "$FILEDIR" ];
+then
+    FILEDIR=/sdcard/$(basename $0)
+fi
 TMPDIR=$FILEDIR/tmp
 OUTDIR=$FILEDIR/out
 INITD=$TMPDIR/init.d
@@ -135,8 +144,7 @@ then
             echo $separator >> $DELOG
             echo "$(OK) This is the very last version of this file" >> $DELOG
             makezip $LOG_PACKED
-            echo "$(OK) compressed the last one" >> $DELOG
-            echo 
+            echo "$(OK) compressed the last one..." >> $DELOG
             cd $THISDIR
             rm -rf $TMPDIR
             mkdir $TMPDIR
@@ -144,7 +152,10 @@ then
             echo "$(OK) Deleted all deprecated filles" >> $DELOG
         else
            echo "$(separator)" >> $DELOG
-           echo "$(OK)  Launched #$ID" >> $DELOG
+           echo "$(OK) Launched #$ID" >> $DELOG
+           echo "$(WARN) Taking a Snapshot of the system logs..." >> $DELOG
+           echo "$(WARN) 'Locking' the daemon!!!" >> $DELOG
+           export LOCKER="TRUE"
         fi
         echo "$(OK) cmdline: '$0 $@'" >> $DELOG
         THISDIR=$(pwd)
@@ -199,7 +210,11 @@ then
         then
             ## When SCLEAN reaches SLIMIT, the daemon log will be cleaned (in order to keep it small)
             SCLEAN=0
-            SLIMIT=40
+            if [ -z "$SLIMIT" ];
+            then
+                # 48 times every 15 min is 12 hours
+                SLIMIT=48
+            fi
             ## Dump all files
             while [ -z "" ];
                 SCLEAN=$(($SCLEAN + 1))
@@ -210,8 +225,7 @@ then
                     rm -rf $TMPDIR
                     mkdir $TMPDIR
                     mv $OUTDIR/ktmp $DELOG
-                    echo "$(OK) Debloated directory"
-                    echo "$(WARN) Keilyd has cleaned the daemon log file" > $DELOG
+                    echo "$(WARN) Keilyd has cleaned the daemon log file and directory" > $DELOG
                 fi
                 do
                      for j in "${REG_LIST[@]}"
@@ -222,9 +236,6 @@ then
                          if [ "$SUCESS" = "Y" ];
                          then
                              VALID="Y"
-                             ## If some file that store only one thing (like logcat) does NoT
-                             ## contains info, must be deleted, but reported to the DLOG file
-                             SFNV="N"
                              echo "$(OK) File: $j successfully initialized."
                              echo "$(OK) $SEPA" >> $TMPDIR/$j
                              case $j in
@@ -236,8 +247,12 @@ $(ls /proc)
                                  " >> $TMPDIR/$j
                                  echo "$(OK) $SEPA" >> $TMPDIR/$j
                                  echo "$(OK) Output of TOP" >> $TMPDIR/$j
+                                 if [ -z "$TOPFLAGS" ];
+                                 then
+                                     export TOPFLAGS="-n 1"
+                                 fi
                                  echo "$(OK)
-$(top -n 1)
+$(top $TOPFLAGS)
                                  " >> $TMPDIR/$j
                                  echo "$(OK) $SEPA" >> $TMPDIR/$j
                                  echo "$(OK) Output of FREE" >> $TMPDIR/$j
@@ -316,7 +331,7 @@ $(cat /proc/last_kmgs)
                                  then
                                      cat /etc/sysctl.conf >> $TMPDIR/$j && echo "$(OK) Dump file $j successfully" || "$(ERR) Can't dump $j" 
                                  else
-                                     echo "$(ERR) /system/etc/sysctl.conf: No such file"
+                                     echo "$(ERR) /etc/sysctl.conf: No such file"
                                  fi
                                  ;;
                              $DF$NORM_PROFIX)
@@ -347,18 +362,26 @@ $(mount)
                     cp /proc/config.gz $TMPDIR/config.gz && echo "$(OK) config.gz found and copied" || echo "$(OK) /proc/config.gz: config.gz support disabled in kernel"
                     cp /proc/filesystems $TMPDIR/filesystems && echo "$(OK) filesystems found and copied" || echo "$(OK) /proc/filesystems: No such file"
                     cp -a /etc/init.d/. $INITD && echo "$(OK) init.d tweaks copied"
-                    echo "$(OK) SHA-256 sum: $(sha256sum $0)"
+                    echo "$(OK) SHA-256 sum: 
+$(sha256sum $0)"
+                    echo "$(OK) SHA-256 sums: $(sha256sum $TMPDIR/*/*)" > $TMPDIR/sha-sums.txt
                     ## Take an instantanely log and exit.
                     THSDIR=$(pwd)
                     makezip $LOG_PACKED
                     cd $THSDIR && echo "$(OK) Here: $THISDIR"
-                    echo "$(OK) Keilyd cycle finished."
+                    echo "$(OK) Keilyd cycle finished! Sleeping: $SECS seconds!!"
                     if [[ $2 == --snap ]];
                     then
                         echo "$(OK) Snapshot successfully taken, exit now..."
+                        export LOCKER="FALSE"
                         break
                     fi
                     sleep $SECS && echo "$(OK) Wait time of $SECS secs successfully finished (c: $SCLEAN))."
+                    while [ "$LOCKER" = "TRUE" ];
+                    do
+                        sleep 5
+                        echo "$(WARN) Daemon LOCKED!!!"
+                    done
                     echo $(separator)
                     echo ""
                     echo ""
@@ -388,7 +411,7 @@ then
            report. If the daemon is running, this will generate a new ZIP, even if the daemon is runing.
            This is only compatible with FULL PATH launch, i.e. 
            
-           '/system/etc/init.d/18keily --snap'
+           '/etc/init.d/18keily --snap'
            "
     echo "The logs will be saved in $TMPDIR"
     echo "If you pharse --help, this message will be printed in the terminal stdout."
