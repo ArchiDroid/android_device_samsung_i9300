@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/system/xbin/bash
 
 # keilyd is a BASH daemon that constantely dumps several system
 # files in a easy-to-share zip in the /sdcard of almost any
