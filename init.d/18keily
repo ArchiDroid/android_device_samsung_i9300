@@ -1,5 +1,19 @@
 #!/system/xbin/bash
 
+# keilyd: A easy-to-share system logs tool for Android
+
+#   Copyright (C) 2015  Oever Gonzalez
+
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 3 of the License, or
+#   (at your option) any later version.
+
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+
 # keilyd is a BASH daemon that constantely dumps several system
 # files in a easy-to-share zip in the /sdcard of almost any
 # Android device. In order to get keilyd working, the script
@@ -105,13 +119,13 @@ LOG_PACKED=$OUTDIR/$LOG_ZIP_PREFIX$(namedate)$PACKED_PROFIX
 DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
 REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX $BNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX $SYSCTL$NORM_PROFIX $DF$NORM_PROFIX )
 
-## Generate a RANDOM id to identify the script and the daemon
+## Generate a RANDOM id to identify the script and the daemon as different stuff
 ID=$RANDOM
 
 function makezip (){
     cd $TMPDIR && echo "$(OK) Here: $TMPDIR"
     rm $1 && echo "$(OK) Deleted $1"
-    zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(ls) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
+    zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(*) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
     mv $DNAME$CURR_PROFIX$PACKED_PROFIX $1 && echo "$(OK) Moved $DNAME$CURR_PROFIX$PACKED_PROFIX to $1"
 }
 
@@ -120,6 +134,25 @@ if [ "$ENABLED" != "Y" ];
 then
     echo "Keilyd soft disabled, exit NOW!"
     exit 0
+fi
+
+## BASH VERSION: For now, ONLY 4.3 is supported
+if [[ !($(bash -version) =~ "4.3") ]];
+then
+    echo "BASH version UNSUPORTED:
+    $(bash -version | grep "GNU bash")"
+    exit 0
+fi
+
+PERM="$(touch /test && export OK4="Y" || export OK4="N")"
+touch /test &> /dev/null && export OK4="Y" || export OK4="N"
+if [[ "$OK4" == "N" && "ermis" =~ $PERM ]];
+then
+    echo "$(ERR) FATAL! Permision Denied!!"
+    exit 0
+else
+    echo "$(OK) Enough permissions!"
+    rm -rf /test
 fi
 
 if [[ $1 = --snap ||  -z $1 ]];
@@ -139,12 +172,11 @@ then
             cd $OUTDIR
             echo $OUTDIR
             ## Pack the LATEST files in /tmp before delete all information, so
-            ## it's allways up-to-date
+            ## its allways up-to-date
             LOG_PACKED=$OUTDIR/$(ls $LOG_ZIP_PREFIX*)
             echo $separator >> $DELOG
             echo "$(OK) This is the very last version of this file" >> $DELOG
             makezip $LOG_PACKED
-            echo "$(OK) compressed the last one..." >> $DELOG
             cd $THISDIR
             rm -rf $TMPDIR
             mkdir $TMPDIR
@@ -155,7 +187,7 @@ then
            echo "$(OK) Launched #$ID" >> $DELOG
            echo "$(WARN) Taking a Snapshot of the system logs..." >> $DELOG
            echo "$(WARN) 'Locking' the daemon!!!" >> $DELOG
-           export LOCKER="TRUE"
+           touch $TMPDIR/locked
         fi
         echo "$(OK) cmdline: '$0 $@'" >> $DELOG
         THISDIR=$(pwd)
@@ -179,7 +211,12 @@ then
         cd $THISDIR
     else
         ## No existe la carpeta en /sdcard
-        mkdir $FILEDIR
+        mkdir $FILEDIR && echo "$(OK) TOP DIR CREATED" || OK="N"
+        if [ "$OK" == "N" ];
+        then
+            echo "$(ERR) FATAL! Can't create top dir!!"
+            exit 0
+        fi
         mkdir $TMPDIR
         mkdir $OUTDIR
         mkdir $INITD
@@ -393,26 +430,43 @@ $(sha256sum $0)"
 elif [[ $1 == --help ]];
 then
     echo "Keilyd, a BASH daemon that constantely dumps the system logs in a easy-to-share ZIP file."
-    echo "This script is only compatible with BASH 4.3 (or higher)."
+    echo "$(OK) Keilyd HELP menu, #$ID."
+    echo "This script is only compatible with BASH 4.3.x."
     echo "In order to get Keilyd working, this pre-conditions must be meet:
              1. Keilyd and you are in a Android based device.
              2. Your SDCARD is mounted or symlinked to /sdcard
-             3. You have BASH 4.3 installed or symlinked on /system/xbin and it works
-             4. Your device have init.d {'run-parts'} support (busybox is mandatory)
-             5. Your device is rooted.
-             6. The script is launched by run-parts or with absolute path
+             3. You have BASH 4.3 installed or symlinked on /system/xbin and it actually works
+             4. Your device have init.d {generally using 'run-parts'} support (part of the BusyBox package)
+             5. Your device is rooted, and without SELinux.
+                    - If your device is protected with SELinux, ensure that the init.d scripts can run
+                      in a unrestricted context (like 'init')
+             6. The script is launched by run-parts or with ABSOLUTE PATH, partial path are not supported:
+                    - './18keily' is INVALID and will return a 'No such file' error
+                    - 'init.d/18keily' will return a error.
+                    - '/etc/init.d/18keily' OR '/system/etc/init.d/18keily' are permited.
+                NOTE: All invoking methods are valid ONLY FOR THE '--help' param.
              "
-    echo "By default, this script is in /etc/init.d/18keily, you can change the directory or the fineame
-             if the avobe conditions are meet.
+    echo "By default, this script is in '/etc/init.d/18keily', you can change the directory or the filename,
+             and launch keilyd with a 3rd party script, if the avobe conditions are meet.
              "
-    echo "Keilyd verify all the environment and exit if there are unmeeted requisites"
+    echo "Keilyd verify all the environment and exit if there are unmeeted requisites, and tell you what and
+          when the things goes wrong."
     echo "You can disable Keilyd without deleting this file by changing ENABLED to any thing but 'Y'."
-    echo "In addition, you can launch keilyd with '--snap' parameter in order to create a instantanely
-           report. If the daemon is running, this will generate a new ZIP, even if the daemon is runing.
-           This is only compatible with FULL PATH launch, i.e. 
-           
-           '/etc/init.d/18keily --snap'
-           "
+    echo "Params:
+              <none>: Automatic daemon launch, this ensure that the environment is ready.
+              --demonize: Runs the daemon mode, but not as a daemon, THIS OPTION IS FORBIDEN.
+              --snap: Takes a 'snapshot' of the current logs and updates all the files to the
+                      lastest taken iformation.
+              --help: Print this help."
+    echo "Keilyd allows the user to override several variables using a third-party launch script and the BASH
+          environment function, this variables can be override (for now):
+              MINS=<int> ; Change the default time that Keily waits to save the info (in minutes).
+              FILEDIR=<path> ; Define the path where Keily stores its info (ABSOLUTE PATH ONLY).
+              SLIMIT=<int> ; Maximun times that Keily will append info in a single file. When this value is
+                             reached, Keily will clean ALL THE FILES, including the daemon log, and others.
+              TOPFLAGS=<int> ; In some devices, the default 'top' parameters are not supported, see the daemon
+                               log to debug this issue and override this variable as needed.
+              ENABLED=<any> ; A value different from <string>'Y' will disable keilyd."
     echo "The logs will be saved in $TMPDIR"
     echo "If you pharse --help, this message will be printed in the terminal stdout."
     echo "NoTengoBattery - 2015"
@@ -422,4 +476,4 @@ else
     echo "$(ERR) Please invoke keilyd with '--demonize' as parameter." >> $DELOG
     echo "Launch keilyd with --help to print a usefull help message."
 fi
-echo "$(OK) Exit #$ID." >> $DELOG
+echo "$(OK) Exit #$ID." >> $DELOG || echo "$(OK) Exit #$ID."
