@@ -125,7 +125,7 @@ ID=$RANDOM
 function makezip (){
     cd $TMPDIR && echo "$(OK) Here: $TMPDIR"
     rm $1 && echo "$(OK) Deleted $1"
-    zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(*) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
+    zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(ls) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
     mv $DNAME$CURR_PROFIX$PACKED_PROFIX $1 && echo "$(OK) Moved $DNAME$CURR_PROFIX$PACKED_PROFIX to $1"
 }
 
@@ -410,11 +410,11 @@ $(sha256sum $0)"
                     if [[ $2 == --snap ]];
                     then
                         echo "$(OK) Snapshot successfully taken, exit now..."
-                        export LOCKER="FALSE"
+                        rm -rf $TMPDIR/locked
                         break
                     fi
                     sleep $SECS && echo "$(OK) Wait time of $SECS secs successfully finished (c: $SCLEAN))."
-                    while [ "$LOCKER" = "TRUE" ];
+                    while [ $(ls $TMPDIR/locked && true || false) ];
                     do
                         sleep 5
                         echo "$(WARN) Daemon LOCKED!!!"
