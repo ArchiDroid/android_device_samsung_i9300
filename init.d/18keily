@@ -106,14 +106,16 @@ OUTDIR=$FILEDIR/out
 INITD=$TMPDIR/init.d
 
 CURR_PROFIX=_curr
+SNAP_PROFIX=_snap
 PACKED_PROFIX=.zip
 LAST_PROFIX=_last
 NORM_PROFIX=.txt
 
-# Pointers to the last and current ZIP
+# Pointers to the last, snap and current ZIP
 LAST_ZIP_PREFIX=$DNAME$LAST_PROFIX
 LOG_ZIP_PREFIX=$DNAME$CURR_PROFIX
 LOG_PACKED=$OUTDIR/$LOG_ZIP_PREFIX$(namedate)$PACKED_PROFIX
+SNAP_PACKED=$OUTDIR/$DNAME$SNAP_PROFIX$(namedate)$PACKED_PROFIX
 
 ## Points to the log file and to all specific files listed above
 DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
@@ -123,10 +125,12 @@ REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NOR
 ID=$RANDOM
 
 function makezip (){
+    THISDIR=$(pwd)
     cd $TMPDIR && echo "$(OK) Here: $TMPDIR"
     rm $1 && echo "$(OK) Deleted $1"
     zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped --> $(ls) <-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
     mv $DNAME$CURR_PROFIX$PACKED_PROFIX $1 && echo "$(OK) Moved $DNAME$CURR_PROFIX$PACKED_PROFIX to $1"
+    cd $THSDIR && echo "$(OK) Here: $THISDIR"
 }
 
 ## BASH VERSION: For now, ONLY 4.3 is supported
@@ -209,7 +213,8 @@ then
         fi
         cd $THISDIR
     else
-        ## No existe la carpeta en /sdcard
+        ## No existe ALGUNA la carpeta en /sdcard
+        rm -rf $FILEDIR
         mkdir $FILEDIR && echo "$(OK) TOP DIR CREATED" || OK="N"
         if [ "$OK" == "N" ];
         then
@@ -400,18 +405,17 @@ $(mount)
                     cp -a /etc/init.d/. $INITD && echo "$(OK) init.d tweaks copied"
                     echo "$(OK) SHA-256 sum: 
 $(sha256sum $0)"
-                    echo "$(OK) SHA-256 sums: $(sha256sum $TMPDIR/*/*)" > $TMPDIR/sha-sums.txt
                     ## Take an instantanely log and exit.
-                    THSDIR=$(pwd)
-                    makezip $LOG_PACKED
-                    cd $THSDIR && echo "$(OK) Here: $THISDIR"
-                    echo "$(OK) Keilyd cycle finished! Sleeping: $SECS seconds!!"
                     if [[ $2 == --snap ]];
                     then
                         echo "$(OK) Snapshot successfully taken, exit now..."
+                        LOG_PACKED=$SNAP_PACKED
                         rm -rf $TMPDIR/locked
                         break
                     fi
+                    echo "$(OK) Keilyd cycle finished! Sleeping: $SECS seconds!!"
+                    ## THIS creates a zip with the daemon log incomplete
+                    makezip $LOG_PACKED
                     sleep $SECS && echo "$(OK) Wait time of $SECS secs successfully finished (c: $SCLEAN))."
                     while [ $(ls $TMPDIR/locked && true || false) ];
                     do
@@ -421,7 +425,12 @@ $(sha256sum $0)"
                     echo $(separator)
                     echo ""
                     echo ""
+                    ## ZIP THIS AGAIN, just to be sure that the ZIP is uptodate
+                    ## THIS FIXES THA ABOVE ISSUE
+                    makezip $LOG_PACKED &> /dev/null
                 done
+                ## WHEN THE WHILE IS BROKEN (--snap for example).
+                makezip $LOG_PACKED &> /dev/null
         else
             echo "$(ERR) Can't enter into working directory."
         fi
@@ -470,9 +479,9 @@ then
     echo "If you pharse --help, this message will be printed in the terminal stdout."
     echo "NoTengoBattery - 2015"
 else
-    echo "$(OK) Launched #$ID" >> $DELOG
-    echo "$(OK) cmdline: '$0 $@'" >> $DELOG
-    echo "$(ERR) Please invoke keilyd with '--demonize' as parameter." >> $DELOG
+    echo "$(OK) Launched #$ID"
+    echo "$(OK) cmdline: '$0 $@'"
+    echo "$(ERR) Please invoke keilyd with '--snap' as parameter."
     echo "Launch keilyd with --help to print a usefull help message."
 fi
 echo "$(OK) Exit #$ID." >> $DELOG || echo "$(OK) Exit #$ID."
