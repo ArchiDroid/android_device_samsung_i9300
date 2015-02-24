@@ -33,10 +33,6 @@ PRODUCT_AAPT_PREF_CONFIG := xhdpi
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/rootdir/fstab.smdk4x12:root/fstab.smdk4x12 \
     $(LOCAL_PATH)/rootdir/init.target.rc:root/init.target.rc
-    
-#Kernel MSG and logging BASH daemon
-PRODUCT_COPY_FILES += \
-    $(LOCAL_PATH)/init.d/18keily:system/etc/init.d
 
 # Audio
 PRODUCT_COPY_FILES += \
@@ -45,6 +41,10 @@ PRODUCT_COPY_FILES += \
 # Sensors
 PRODUCT_PACKAGES += \
     sensors.smdk4x12
+    
+# Keilyd    
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/init.d/18keily:system/etc/init.d
 
 # Gps
 PRODUCT_COPY_FILES += \
