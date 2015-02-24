@@ -50,6 +50,8 @@ LASTKMSG="last_kmsg"
 SYSCTL="sysctl_conf"
 ## Output of 'df'
 DF="df"
+## Version
+DVERSION="0.1-beta"
 
 ## MINS is the time in minutes that keilyd must wait untill it's
 ## dumps the files again. ONLY INTS
@@ -183,11 +185,11 @@ then
             cd $THISDIR
             rm -rf $TMPDIR
             mkdir $TMPDIR
-            echo "$(OK) Launched #$ID" > $DELOG
+            echo "$(OK) Launched #$ID - Version: $DVERSION" > $DELOG
             echo "$(OK) Deleted all deprecated filles" >> $DELOG
         else
            echo "$(separator)" >> $DELOG
-           echo "$(OK) Launched #$ID" >> $DELOG
+           echo "$(OK) Launched #$ID - Version: $DVERSION" >> $DELOG
            echo "$(WARN) Taking a Snapshot of the system logs..." >> $DELOG
            echo "$(WARN) 'Locking' the daemon!!!" >> $DELOG
            touch $TMPDIR/locked
@@ -224,7 +226,7 @@ then
         mkdir $TMPDIR
         mkdir $OUTDIR
         mkdir $INITD
-        echo "$(OK) Launched #$ID" > $DELOG
+        echo "$(OK) Launched #$ID - Version: $DVERSION" > $DELOG
         echo "$(OK) cmdline: '$0 $@'" >> $DELOG
         echo "$(OK) Created working dirs." >> $DELOG
         echo "$(OK) Relaunch keilyd from first startup." >> $DELOG
@@ -236,7 +238,7 @@ then
 elif [[ $1 == --demonize ]];
 ## Keilyd as daemon
 then
-    echo "$(OK) Launched (daemon) #$ID"
+    echo "$(OK) Launched (daemon) #$ID - Version: $DVERSION"
     echo "$(OK) cmdline: '$0 $@'" >> $DELOG
     echo "$(OK) Daemon started."
     WHOAMI=$(whoami)
@@ -438,7 +440,7 @@ $(sha256sum $0)"
 elif [[ $1 == --help ]];
 then
     echo "Keilyd, a BASH daemon that constantely dumps the system logs in a easy-to-share ZIP file."
-    echo "$(OK) Keilyd HELP menu, #$ID."
+    echo "$(OK) Keilyd HELP menu, #$ID - Version: $DVERSION"
     echo "This script is only compatible with BASH 4.3.x."
     echo "In order to get Keilyd working, this pre-conditions must be meet:
              1. Keilyd and you are in a Android based device.
