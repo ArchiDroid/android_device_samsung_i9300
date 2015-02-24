@@ -29,7 +29,7 @@
 # A value different than "Y" will disable Keilyd
 if [ -z "$ENABLED" ];
 then
-    ENABLED="Y"
+    ENABLED="N"
 fi
 
 ## This is the daemon registry
@@ -129,13 +129,6 @@ function makezip (){
     mv $DNAME$CURR_PROFIX$PACKED_PROFIX $1 && echo "$(OK) Moved $DNAME$CURR_PROFIX$PACKED_PROFIX to $1"
 }
 
-## EXIT IF Keilyd is disabled
-if [ "$ENABLED" != "Y" ];
-then
-    echo "Keilyd soft disabled, exit NOW!"
-    exit 0
-fi
-
 ## BASH VERSION: For now, ONLY 4.3 is supported
 if [[ !($(bash -version) =~ "4.3") ]];
 then
@@ -167,6 +160,12 @@ then
         ## Quitar el directorio TMP
         if [ -z $1 ];
         then
+            ## EXIT IF Keilyd is disabled
+            if [ "$ENABLED" != "Y" ];
+            then
+               echo "keilyd (daemon) soft disabled, exit NOW!"
+               exit 0
+            fi
             THISDIR=$(pwd)
             pwd
             cd $OUTDIR
