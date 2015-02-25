@@ -52,6 +52,8 @@ SYSCTL="sysctl_conf"
 DF="df"
 ## Version
 DVERSION="0.1-beta"
+## A dirty way to list installed Apps
+APPFILE="apps"
 
 ## MINS is the time in minutes that keilyd must wait untill it's
 ## dumps the files again. ONLY INTS
@@ -121,7 +123,9 @@ SNAP_PACKED=$OUTDIR/$DNAME$SNAP_PROFIX$(namedate)$PACKED_PROFIX
 
 ## Points to the log file and to all specific files listed above
 DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
-REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX $BNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX $SYSCTL$NORM_PROFIX $DF$NORM_PROFIX )
+REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX )
+REG_LIST+=( $BNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX $SYSCTL$NORM_PROFIX $DF$NORM_PROFIX )
+REG_LIST+=( $APPFILE$NORM_PROFIX )
 
 ## Generate a RANDOM id to identify the script and the daemon as different stuff
 ID=$RANDOM
@@ -143,19 +147,18 @@ then
     exit 0
 fi
 
-PERM="$(touch /test && export OK4="Y" || export OK4="N")"
-touch /test &> /dev/null && export OK4="Y" || export OK4="N"
-if [[ "$OK4" == "N" && "ermis" =~ $PERM ]];
-then
-    echo "$(ERR) FATAL! Permision Denied!!"
-    exit 0
-else
-    echo "$(OK) Enough permissions!"
-    rm -rf /test
-fi
-
 if [[ $1 = --snap ||  -z $1 ]];
 then
+    PERM="$(touch /test && export OK4="Y" || export OK4="N")"
+    touch /test &> /dev/null && export OK4="Y" || export OK4="N"
+    if [[ "$OK4" == "N" && "ermis" =~ $PERM ]];
+    then
+        echo "$(ERR) FATAL! Permision Denied!!"
+        exit 0
+    else
+        echo "$(OK) Enough permissions!"
+        rm -rf /test
+    fi
     MAKEDIR=""
     ls $FILEDIR &> /dev/null || MAKEDIR="Y"
     ls $OUTDIR &> /dev/null || MAKEDIR="Y"
@@ -387,6 +390,17 @@ $(df)
                                  echo "$(OK)
 $(mount)
                                  " >> $TMPDIR/$j
+                                 ;;
+                             $APPFILE$NORM_PROFIX)
+                                 echo "$(OK) List of installed Apps" >> $TMPDIR/$j
+                                 echo "$(OK) System:" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cd /system/app && ls)
+                                 ">> $TMPDIR/$j
+                                  echo "$(OK) User:" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cd /data/app && ls)
+                                 ">> $TMPDIR/$j
                                  ;;
                              *)
                                  echo "$(ERR) $j: No such file. Please add it to the REG_LIST."
