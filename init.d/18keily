@@ -1,0 +1,649 @@
+#!/system/xbin/bash
+
+# keilyd: A easy-to-share system logs tool for Android
+
+#   Copyright (C) 2015  Oever Gonzalez
+
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 3 of the License, or
+#   (at your option) any later version.
+
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+
+# keilyd is a BASH daemon that constantely dumps several system
+# files in a easy-to-share zip in the /sdcard of almost any
+# Android device. In order to get keilyd working, the script
+# must have to live in ../init.d; the device must have init.d
+# support (implies busybox) and must have bash installed in
+# ../xbin
+
+# This script runs only in bash, it's not compatible with dash,
+# zsh, or even with sh
+
+# NoTengoBattery - 2015
+
+########################################################################
+### THIS BLOCK DETERMINE THE ENABLED-DISABLED BEHAVIOR
+
+# A value different than "Y" will disable Keilyd
+if [ -z "$ENABLED" ];
+then
+    #Change this value to "Y" if you want to enable the daemon permanently
+    ENABLED="N"
+fi
+
+########################################################################
+### HERE ARE THE FILES WHERE THE INFO WILL BE DUMPED (NAME ONLY)
+
+## This is the daemon registry
+DNAME="$(basename $0)"
+## Dumps the processes
+PNAME="process"
+## Dumps the kernel log
+KNAME="kinfo"
+## Dumps logcat
+CNAME="logcat"
+## Dumps the cpuinfo
+CPUNAME="cpuinfo"
+## Dumps "build.prop"
+BNAME="build_prop"
+## Dumps the last kernel log
+LASTKMSG="last_kmsg"
+## Dumps "sysctl.conf"
+SYSCTL="sysctl_conf"
+## Output of 'df'
+DF="df"
+## Version
+DVERSION="0.2-beta"
+## A dirty way to list installed Apps
+APPFILE="apps"
+
+########################################################################
+### YOU CAN DETERMINE THE KEILYD FREQUENCY HERE, RECOMENDED VALUES:
+### FROM 5 MINUTES TO 15 MINUTES
+
+## MINS is the time in minutes that keilyd must wait untill it's
+## dumps the files again. ONLY INTS
+if [ -z "$MINS" ];
+then
+    MINS=15
+fi
+SECS=$(($MINS * 60))
+
+########################################################################
+### FUNCTIONS USED TO GENERATE A TIME STAMP (1)
+
+## Date and time for the registry
+function dtime (){
+    DATE="$(date +%m%d%y@%H:%M:%S)"
+    echo $DATE
+}
+## Date and time for the timestamp in the filename
+function namedate (){
+    DATE="-$(date +%m%d%y-%H.%M)"
+    echo $DATE
+}
+
+########################################################################
+### A SNAPSHOT IS BEING TAKEN RIGHT NOW! WAIT UNTIL DONE
+### IF THE SNAP DOES NOT UNLOCK THE DAEMON, THE DAEMON WILL UNLOCK ITSELF
+### AFTER 6 ATTEMPTS (30 SECS)
+function lock (){
+    TOL=0
+    while [ -f $TMPDIR/locked ];
+    do
+        TOL=$(($TOL + 1))
+        echo "$(WARN) Daemon LOCKED!!!($TOL)"
+        sleep 5
+        if [ "$TOL" = "6" ];
+        then
+            echo "$(WARN) Auto-unlock"
+            rm $TMPDIR/locked
+            break
+        fi
+    done
+}
+                    
+########################################################################
+### THOSE FUNCTIONS GIVE FORMAT TO THE DAEMON LOG:
+## D: DONE ; W: WARNING ; E: ERROR
+# DEPEND ON (1)
+
+function OK (){
+    OK="[ -D-$(dtime) ]"
+    echo $OK
+}
+
+function WARN (){
+    WARN="[ -W-$(dtime) ]"
+    echo $WARN
+}
+function ERR (){
+    ERR="[ --E-$(dtime) ]"
+    echo $ERR
+}
+
+########################################################################
+### JUST A SEPARATOR (INVOKE IT AS $(separator))
+
+## Prints a usefull separator between lines
+function separator (){
+    CHAR="#"
+    SEP=""
+    for s in {1..64}
+    do
+        SEP=$SEP$CHAR
+    done
+    echo "$SEP"
+}
+
+SEPA=$(separator)
+
+########################################################################
+### HERE YOU DETERMINE WHERE THE LOGS WILL BE STORED (AND THE ZIPS TOO)
+### ONLY ABSOLUTE PATH AND WITHOUT QUOTES (2)
+
+## FILEDIR points to the very top of the working directory.
+## TMPDIR and OUTDIR are subdirectories
+if [ -z "$FILEDIR" ];
+then
+    FILEDIR=/sdcard/$(basename $0)
+fi
+TMPDIR=$FILEDIR/tmp
+OUTDIR=$FILEDIR/out
+INITD=$TMPDIR/init.d
+
+########################################################################
+### PROFIXES AND PREFIXES THAT INDICATES SEVERAL FILE TYPES AND STATUS
+### (3)
+
+CURR_PROFIX=_curr
+SNAP_PROFIX=_snap
+PACKED_PROFIX=.zip
+LAST_PROFIX=_last
+NORM_PROFIX=.txt
+
+########################################################################
+### DO NOT MODIFY!! THIS DEPEND ON ( 1, 2, 3 )
+
+# Pointers to the last, snap and current ZIP
+LAST_ZIP_PREFIX=$DNAME$LAST_PROFIX
+LOG_ZIP_PREFIX=$DNAME$CURR_PROFIX
+LOG_PACKED=$OUTDIR/$LOG_ZIP_PREFIX$(namedate)$PACKED_PROFIX
+SNAP_PACKED=$OUTDIR/$DNAME$SNAP_PROFIX$(namedate)$PACKED_PROFIX
+
+########################################################################
+### HERE YOU CAN ADD NEW FILES (FEATURES), PUT $NORM_PROFIX AT THE END
+### OF EVERY FILE CREATED :)
+
+## Points to the log file and to all specific files listed above
+DELOG=$TMPDIR/$DNAME$CURR_PROFIX$NORM_PROFIX
+REG_LIST=( $PNAME$NORM_PROFIX $KNAME$NORM_PROFIX $CNAME$NORM_PROFIX $CPUNAME$NORM_PROFIX )
+REG_LIST+=( $BNAME$NORM_PROFIX $LASTKMSG$NORM_PROFIX $SYSCTL$NORM_PROFIX $DF$NORM_PROFIX )
+REG_LIST+=( $APPFILE$NORM_PROFIX )
+
+########################################################################
+### DO NOT MODIFY! A RANDOM INDICATOR THAT CAN BE USEFUL TO IDENTIFY
+### SEVERAL KEILYD INSTANCE
+
+## Generate a RANDOM id to identify the script and the daemon as different stuff
+ID=$RANDOM
+
+########################################################################
+### DO NOT MODIFY!! THIS FUNCTION ACTUALLY CREATES THE ZIP (THE CORE
+### FUNCTIONALITY). DEPEND ON ( 1, 2, 3 )
+
+function makezip (){
+    THISDIR=$(pwd)
+    cd $TMPDIR && echo "$(OK) Here: $TMPDIR"
+    rm $1 && echo "$(OK) Deleted $1"
+    zip -r -9 $DNAME$CURR_PROFIX$PACKED_PROFIX * && echo "$(OK) Zipped -->
+$(ls)
+<-- in $DNAME$CURR_PROFIX$PACKED_PROFIX"
+    mv $DNAME$CURR_PROFIX$PACKED_PROFIX $1 && echo "$(OK) Moved $DNAME$CURR_PROFIX$PACKED_PROFIX to $1"
+    cd $THSDIR && echo "$(OK) Here: $THISDIR"
+}
+
+########################################################################
+### DETERMINE BASH VERSION
+
+## BASH VERSION: For now, ONLY 4.3 is supported
+if [[ !($(bash -version) =~ "4.3") ]];
+then
+    echo "BASH version UNSUPORTED:
+    $(bash -version | grep "GNU bash")"
+    exit 0
+fi
+
+########################################################################
+### THE MAIN LOOP!!!
+
+if [[ $1 = --snap ||  -z $1 ]];
+then
+########################################################################
+### DIRTY WAY TO DETERMINE PERMISIONS
+    PERM="$(touch /test)"
+    touch /test &> /dev/null && OK4="Y" || OK4="N"
+    if [[ "$OK4" == "N" && "ermis" =~ $PERM ]];
+    then
+        echo "$(ERR) FATAL! Permision Denied!!"
+        exit 0
+    else
+        echo "$(OK) Enough permissions!"
+        ## Self symlink to /system/xbin
+        mount -o remount,rw /system
+        ls /system/xbin/keilyd && echo "$(OK) symlink exist!" || ln $0 /system/xbin/keilyd
+        mount -o remount,ro /system
+        rm /test
+    fi
+########################################################################
+### SOME DIRECTORY IS NOT PRESENT?
+    MAKEDIR=""
+    DIRS=( $FILEDIR $OUTDIR $INITD $TMPDIR )
+    for i in "${DIRS[@]}"
+    do
+        MKDIR="N"
+        ls $i &> /dev/null && MKDIR="N" || MKDIR="Y"
+        if [ "$MKDIR" = "Y" ];
+        then
+            mkdir $i && MAKEDIR="$MAKEDIR" || MAKEDIR=$MAKEDIR"Y"
+        fi
+    done
+########################################################################
+### THE ANSWER IS (YES), DO INIT STUFF
+    if [ -z $MAKEDIR ];
+    then
+########################################################################
+### DOES KEILYD WERE LAUNCHED WITHOUT PARAMS? IF YES (A)
+        if [ -z $1 ];
+        then
+            ## EXIT IF Keilyd is disabled
+            if [ "$ENABLED" != "Y" ];
+            then
+               echo "keilyd (daemon) soft disabled, exit NOW!"
+               exit 0
+            fi
+            THISDIR=$(pwd)
+            pwd
+            cd $OUTDIR
+            echo $OUTDIR
+            ## Pack the LATEST files in /tmp before delete all information, so
+            ## its allways up-to-date
+            LOG_PACKED=$OUTDIR/$(ls $LOG_ZIP_PREFIX*)
+            echo $separator >> $DELOG
+            echo "$(OK) LATEST VERSION" >> $DELOG
+########################################################################
+### YOU CANT CLEAN THE DIRECTORY IF YOU DONT BACKUP IT FIRST!
+            makezip $LOG_PACKED
+            cd $THISDIR
+            rm -rf $TMPDIR
+            mkdir $TMPDIR
+########################################################################
+### INITIALIZE THE LOG
+            echo "$(OK) Launched #$ID - Version: $DVERSION" > $DELOG
+            echo "$(OK) BASH:
+            
+$(bash -version)
+" >> $DELOG
+            echo "$(OK) Clean!" >> $DELOG
+########################################################################
+### (A) OTHERWISE, --snap WERE INVOKED
+        else
+           echo "$(separator)" >> $DELOG
+           echo "$(OK) Launched #$ID - Version: $DVERSION" >> $DELOG
+           echo "$(WARN) Snapshot: system logs" >> $DELOG
+           echo "$(WARN) 'Locking' the daemon!!!" >> $DELOG
+########################################################################
+### LOCK THE DAEMON
+           touch $TMPDIR/locked
+        fi
+        echo "$(OK) cmdline: '$0 $@'" >> $DELOG
+        THISDIR=$(pwd)
+        echo "$(OK) Here: '$THISDIR'" >> $DELOG
+        cd $OUTDIR
+        echo "$(OK) Here: '$OUTDIR'" >> $DELOG
+########################################################################
+### THIS IS ONLY NEEDED IN A NORMAL DEAMON LAUNCH (ITS ILLEGAL IN A
+### --snap LAUNCH)
+        if [ -z $1 ];
+        then
+            ## Borro los "last" inutiles
+            FIL=$(ls $LAST_ZIP_PREFIX*)
+            rm $LAST_ZIP_PREFIX* &> /dev/null && echo "$(OK) Deleted $FIL" >> $DELOG
+            ## Muevo los "current" a Last antes de sobrescribirlos
+            FIL=$(ls $LOG_ZIP_PREFIX*)
+########################################################################
+### WARNING THAKE A LOOK AT THIS LINE: THIS CAN EXTRACT THE DATE FROM
+### THE LAST ZIP, THIS EXPLICIT DEPENDS ON (1)
+            DAT="${FIL: -17:17}"
+            mv $LOG_ZIP_PREFIX* $LAST_ZIP_PREFIX$DAT && echo "$(OK) Moved $FIL to $LAST_ZIP_PREFIX$DAT" >> $DELOG
+########################################################################
+### INITIALIZE EVERY SINGLE FILE
+            for i in "${REG_LIST[@]}"
+            do
+                echo "" > $TMPDIR/$i && echo "$(OK) File $TMPDIR/$i initialized" >> $DELOG || echo "$(ERR) Can't write $TMPDIR/$i" >> $DELOG
+            done
+        fi
+        cd $THISDIR
+    else
+########################################################################
+### IF ONE DIRECTORY CAN'T BE FOUND: DELETE ALL AND START FROM SCRATCH
+### WARNING!!! THIS MAY CAUSE DATA LOSS!!!
+        rm -rf $FILEDIR
+        mkdir $FILEDIR && echo "$(OK) TOP DIR CREATED" || OK="N"
+        if [ "$OK" == "N" ];
+        then
+            echo "$(ERR) FATAL! Can't create top dir!!"
+            exit 0
+        fi
+        mkdir $TMPDIR
+        mkdir $OUTDIR
+        mkdir $INITD
+        echo "$(OK) Launched #$ID - Version: $DVERSION" > $DELOG
+        echo "$(OK) cmdline: '$0 $@'" >> $DELOG
+        echo "$(OK) Created working dirs." >> $DELOG
+        echo "$(OK) Relaunch keilyd from first startup." >> $DELOG
+        setsid $0 $@ &>>/dev/null < /dev/null &
+        exit 0
+    fi
+    echo "$(OK) Keilyd preload successfully" >> $DELOG
+########################################################################
+### START THE DAEMON!!
+    setsid $0 --demonize $1 &>>$DELOG < $DELOG &
+elif [[ $1 == --demonize ]];
+## Keilyd as daemon
+then
+    echo "$(OK) Launched (daemon) #$ID - Version: $DVERSION"
+    echo "$(OK) cmdline: '$0 $@'" >> $DELOG
+    echo "$(OK) Daemon started."
+########################################################################
+### VERIFY ROOT
+    WHOAMI=$(whoami)
+    if [ "$WHOAMI" != "root" ];
+    then
+        echo "$(ERR) Keilyd must be launched as root, '$WHOAMI' is not root."
+    else
+        echo "$(OK) Keily#$ID have root privilegies"
+        cd $FILEDIR && echo "$(OK) Here: $FILEDIR" || echo "$(ERR) Can't enter in $FILEDIR"
+        THISDIR=$(pwd)
+########################################################################
+### VERIFY ACCESS TO WORKING DIRECTORY
+        if [ "$THISDIR" = "$FILEDIR" ];
+        then
+            ## When SCLEAN reaches SLIMIT, the daemon log will be cleaned (in order to keep it small)
+            SCLEAN=0
+            if [ -z "$SLIMIT" ];
+            then
+                # 48 times every 15 min is 12 hours,
+                SLIMIT=48
+            fi
+            ## Dump all files
+########################################################################
+### THE "FOREVER" WHILE
+            while [ -z "" ];
+            do
+            if [[ $2 != --snap ]];
+            then
+                lock
+            fi
+########################################################################
+### SELF-CLEANING FEAUTE
+                SCLEAN=$(($SCLEAN + 1))
+                if [ "$SCLEAN" = "$SLIMIT" ];
+                then
+                    SCLEAN=0
+                    mv $DELOG $OUTDIR/ktmp
+                    rm -rf $TMPDIR
+                    mkdir $TMPDIR
+                    mv $OUTDIR/ktmp $DELOG
+                    echo "$(WARN) Keilyd has cleaned the daemon log file and directory" > $DELOG
+                fi
+########################################################################
+### ITERATE IN ALL FILES LISTED IN REG_LIST
+                     for j in "${REG_LIST[@]}"
+                     do
+                         echo "$(OK) Working on: $j."
+                         SUCESS=""
+                         echo "$(OK) SOF" > $TMPDIR/$j && SUCESS="Y" || SUCESS="N"
+########################################################################
+### THE FILE CAN BE WRITTEN
+                         if [ "$SUCESS" = "Y" ];
+                         then
+                             VALID="Y"
+                             echo "$(OK) File: $j initialized."
+                             echo "$(OK) $SEPA" >> $TMPDIR/$j
+########################################################################
+### DIFERENT COMMANDS AND STUFF FOR DIFFERENT FILES ;)
+### ADD >> $TMPDIR/$j AT THE END OF ALL THE LINES THAT MUST BE IN IT'S
+### OWN FILE (NOTE THE DOBLE > : >> )
+                             case $j in
+                             $PNAME$NORM_PROFIX)
+                                 ## PROCESOS CORRIENTES Y SU INFORMACION (/proc)
+                                 echo "$(OK) Files in /proc" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(ls /proc)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Output of TOP" >> $TMPDIR/$j
+########################################################################
+### THE TOP PARAMS CAN BE OVERRIDE
+                                 if [ -z "$TOPFLAGS" ];
+                                 then
+                                     export TOPFLAGS="-n 1"
+                                 fi
+                                 echo "$(OK)
+$(top $TOPFLAGS)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Output of FREE" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(free)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 ;;
+                             $KNAME$NORM_PROFIX)
+                             ## COSAS DEL KERNEL
+                                 echo "$(OK) Kernel version" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(uname -a)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) GCC and Host" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cat /proc/version)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Modules (/proc/modules)" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cat /proc/modules)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) CMDLINE" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(cat /proc/cmdline)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) DMESG" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(dmesg)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 ;;
+                             $CNAME$NORM_PROFIX)
+                                 echo "$(OK) Logcat RADIO"  >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(logcat -b radio -v time -d)
+                                 "  >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Logcat EVENTS"  >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(logcat -b events -v time -d)
+                                 "  >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Logcat MAIN"  >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(logcat -b main -v time -d)
+                                 "  >> $TMPDIR/$j
+                                 ;;
+                             $CPUNAME$NORM_PROFIX)
+                                 echo "$(OK) CPU Info" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(cat /proc/cpuinfo)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             $BNAME$NORM_PROFIX)
+                                 echo "$(OK) Copy of ../build.prop" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(cat /system/build.prop)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             $LASTKMSG$NORM_PROFIX)
+                                 echo "$(OK) last_kmsg dump" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(cat /proc/last_kmsg)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             $SYSCTL$NORM_PROFIX)
+                                 EX=""
+                                 ls /etc/sysctl.conf &> /dev/null && EX="Y" || EX="N"
+                                 if [ "$EX" = "Y" ];
+                                 then
+                                     cat /etc/sysctl.conf >> $TMPDIR/$j && echo "$(OK) sysctl > $j" || "$(ERR) Can't dump $j" 
+                                 else
+                                     echo "$(WARN) /etc/sysctl.conf: No sysctl tweaks!"
+                                 fi
+                                 ;;
+                             $DF$NORM_PROFIX)
+                                 echo "$(OK) Output of DF" >> $TMPDIR/$j
+                                 echo "$(OK) 
+$(df)
+                                 " >> $TMPDIR/$j
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) Output of 'mount'" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(mount)
+                                 " >> $TMPDIR/$j
+                                 ;;
+                             $APPFILE$NORM_PROFIX)
+                                 echo "$(OK) List of installed Apps" >> $TMPDIR/$j
+                                 echo "$(OK) System:" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(ls /system/app)
+                                 ">> $TMPDIR/$j
+                                  echo "$(OK) User:" >> $TMPDIR/$j
+                                 echo "$(OK)
+$(ls /data/app)
+                                 ">> $TMPDIR/$j
+                                 ;;
+                             *)
+                                 echo "$(ERR) $j: No such feature. Please add it to REG_LIST and to the CASE."
+                                 rm $TMPDIR/$j
+                                 VALID="N"
+                                 ;;
+                             esac
+########################################################################
+### MARK THE END OF THE FILE
+                             if [ "$VALID" = "Y" ];
+                             then
+                                 echo "$(OK) $SEPA" >> $TMPDIR/$j
+                                 echo "$(OK) EOF" >> $TMPDIR/$j
+                                 echo "$(OK) $j: finished"
+                             fi
+                         else
+                             echo "$(ERR) Can't access to $j."
+                         fi
+                    done
+########################################################################
+### THESE FILES/FOLDERS CAN BE COPIED USING CP
+                    cp /proc/config.gz $TMPDIR/config.gz &> /dev/null && echo "$(OK) config.gz: copied!" || echo "$(WARN) /proc/config.gz: kernel disabled!"
+                    cp -a /etc/init.d/. $INITD &> /dev/null && echo "$(OK) init.d tweaks copied" || echo "$(WARN) No init.d tweaks!"
+########################################################################
+### KEILYD SHA-256 SUM (CAN BE USEFUL)!!
+                    echo "$(OK) SHA-256 sum: 
+$(sha256sum $0)"
+########################################################################
+### TAKE THE SNAPSHOT AND EXIT (THE EXIT HERE WONT AFFECT ANY RUNNING
+### DAEMON)
+                    if [[ $2 == --snap ]];
+                    then
+                        echo "$(OK) Snapshot successfully taken, exit now..."
+                        LOG_PACKED=$SNAP_PACKED
+                        rm $TMPDIR/locked
+                        break
+                    fi
+                    echo "$(OK) Keilyd cycle finished! Sleeping: $SECS seconds!!"
+                    ## THIS creates a zip with the daemon log incomplete
+                    #This is needded because the next ZIP will be created when the time finishes.
+                    lock
+                    makezip $LOG_PACKED
+########################################################################
+### zZzZzzzZzzzzZzzzZZzzz
+                    sleep $SECS && echo "$(OK) Wait time of $SECS s ($MINS m) finished (c: $SCLEAN))."
+                    echo $(separator)
+                    echo ""
+                    echo ""
+                    ## ZIP THIS AGAIN, just to be sure that the ZIP is uptodate
+                    ## THIS FIXES THA ABOVE ISSUE
+                    lock
+                    makezip $LOG_PACKED &> /dev/null
+                done
+                ## WHEN THE WHILE IS BROKEN (--snap for example).
+                makezip $LOG_PACKED &> /dev/null
+        else
+            echo "$(ERR) Can't enter into working directory."
+        fi
+    fi
+elif [[ $1 == --help ]];
+then
+    echo "Keilyd, a BASH daemon that constantely dumps the system logs in a easy-to-share ZIP file."
+    echo "$(OK) Keilyd HELP menu, #$ID - Version: $DVERSION"
+    echo "This script is only compatible with BASH 4.3.x."
+    echo "In order to get Keilyd working, this pre-conditions must be meet:
+             1. Keilyd and you are in a Android based device.
+             2. Your SDCARD is mounted or symlinked to /sdcard
+             3. You have BASH 4.3 installed or symlinked on /system/xbin and it actually works
+             4. Your device have init.d {generally using 'run-parts'} support (part of the BusyBox package)
+             5. Your device is rooted, and without SELinux.
+                    - If your device is protected with SELinux, ensure that the init.d scripts can run
+                      in a unrestricted context (like 'init')
+             6. The script is launched by run-parts or with ABSOLUTE PATH, partial path are not supported:
+                    - './18keily' is INVALID and will return a 'No such file' error
+                    - 'init.d/18keily' will return a error.
+                    - '/etc/init.d/18keily' OR '/system/etc/init.d/18keily' are permited.
+                NOTE: All invoking methods are valid ONLY FOR THE '--help' param.
+             "
+    echo "By default, this script is in '/etc/init.d/18keily', you can change the directory or the filename,
+             and launch keilyd with a 3rd party script, if the avobe conditions are meet.
+             "
+    echo "Keilyd verify all the environment and exit if there are unmeeted requisites, and tell you what and
+          when the things goes wrong."
+    echo "You can disable Keilyd without deleting this file by changing ENABLED to any thing but 'Y'."
+    echo "Params:
+              <none>: Automatic daemon launch, this ensure that the environment is ready.
+              --demonize: Runs the daemon mode, but not as a daemon, THIS OPTION IS FORBIDEN.
+              --snap: Takes a 'snapshot' of the current logs and updates all the files to the
+                      lastest taken iformation.
+              --help: Print this help."
+    echo "Keilyd allows the user to override several variables using a third-party launch script and the BASH
+          environment function, this variables can be override (for now):
+              MINS=<int> ; Change the default time that Keily waits to save the info (in minutes).
+              FILEDIR=<path> ; Define the path where Keily stores its info (ABSOLUTE PATH ONLY).
+              SLIMIT=<int> ; Maximun times that Keily will append info in a single file. When this value is
+                             reached, Keily will clean ALL THE FILES, including the daemon log, and others.
+              TOPFLAGS=<int> ; In some devices, the default 'top' parameters are not supported, see the daemon
+                               log to debug this issue and override this variable as needed.
+              ENABLED=<any> ; A value different from <string>'Y' will disable keilyd."
+    echo "The logs will be saved in $TMPDIR"
+    echo "If you pharse --help, this message will be printed in the terminal stdout."
+    echo "NoTengoBattery - 2015"
+else
+    echo "$(OK) Launched #$ID"
+    echo "$(OK) cmdline: '$0 $@'"
+    echo "$(ERR) Please invoke keilyd with '--snap' as parameter."
+    echo "Launch keilyd with --help to print a usefull help message."
+fi
+echo "$(OK) Exit #$ID." >> $DELOG || echo "$(OK) Exit #$ID."

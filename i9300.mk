@@ -41,6 +41,10 @@ PRODUCT_COPY_FILES += \
 # Sensors
 PRODUCT_PACKAGES += \
     sensors.smdk4x12
+    
+# Keilyd    
+PRODUCT_COPY_FILES += \
+    $(LOCAL_PATH)/init.d/18keily:system/etc/init.d
 
 # Gps
 PRODUCT_COPY_FILES += \
